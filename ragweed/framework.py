@@ -9,8 +9,7 @@ from boto.s3.key import Key
 from nose.plugins.attrib import attr
 from nose.tools import eq_ as eq
 
-
-ragweed = None
+ragweed_env = None
 suite = None
 
 class RGWConnection:
@@ -141,37 +140,7 @@ class RTest:
             self.load()
             self.check()
 
-
-
-class r_test_small_obj_data(RTest):
-    def stage(self):
-        self.r_obj_names = [ 'obj', '_', '__', '_ _' ]
-        self.r_bucket_sizes = {}
-
-        sizes = { 0, 512 * 1024, 1024 * 1024 }
-
-        for size in sizes:
-            bucket = self.create_bucket()
-            self.r_bucket_sizes[bucket.name] = size
-            data = '0' * size
-            for n in self.r_obj_names:
-                obj = Key(bucket)
-                obj.key = n;
-                obj.set_contents_from_string(data)
-
-    def check(self):
-        print self.r_obj_names
-        for bucket in self.get_buckets():
-            print bucket.name
-            size = self.r_bucket_sizes[bucket.name]
-            data = '0' * int(size)
-            for n in self.r_obj_names:
-                obj = Key(bucket)
-                obj.key = n;
-                obj_data = obj.get_contents_as_string()
-                eq(data, obj_data)
-
-class Ragweed:
+class RagweedEnv:
     def __init__(self):
         access_key = os.environ['S3_ACCESS_KEY_ID']
         secret_key = os.environ['S3_SECRET_ACCESS_KEY']
@@ -180,11 +149,13 @@ class Ragweed:
         self.conn = RGWConnection(access_key, secret_key, host)
         self.suite = RSuite('ragweed', self.conn, os.environ['RAGWEED_RUN'])
 
+        print self.suite
+
 
 
 def setup_module():
-    global ragweed
+    global ragweed_env
     global suite
 
-    ragweed = Ragweed()
-    suite = ragweed.suite
+    ragweed_env = RagweedEnv()
+    suite = ragweed_env.suite
