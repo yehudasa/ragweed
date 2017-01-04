@@ -5,6 +5,9 @@ import boto.s3.connection
 import json
 import inspect
 import pickle
+import bunch
+import yaml
+import ConfigParser
 from boto.s3.key import Key
 from nose.plugins.attrib import attr
 from nose.tools import eq_ as eq
@@ -13,17 +16,13 @@ ragweed_env = None
 suite = None
 
 class RGWConnection:
-    def __init__(self, access_key, secret_key, host):
-        host, port = (host.rsplit(':', 1) + [None])[:2]
-        if port:
-            port = int(port)
-
+    def __init__(self, access_key, secret_key, host, port, is_secure):
         self.conn = boto.connect_s3(
                 aws_access_key_id = access_key,
                 aws_secret_access_key = secret_key,
                 host=host,
                 port=port,
-                is_secure=False,
+                is_secure=is_secure,
                 calling_format = boto.s3.connection.OrdinaryCallingFormat(),
                 )
 
@@ -35,9 +34,9 @@ class RGWConnection:
 
 
 class RSuite:
-    def __init__(self, name, connection, suite_step):
+    def __init__(self, name, conn, suite_step):
         self.name = name
-        self.conn = connection
+        self.conn = conn
         self.config_bucket = None
         self.rtests = []
         self.do_staging = False
@@ -54,10 +53,10 @@ class RSuite:
         return self.name + '-' + suffix
 
     def create_bucket(self, name):
-        return self.conn.create_bucket(name)
+        return self.conn.regular.create_bucket(name)
 
     def get_bucket(self, name):
-        return self.conn.get_bucket(name)
+        return self.conn.regular.get_bucket(name)
 
     def register_test(self, t):
         self.rtests.append(t)
@@ -140,16 +139,92 @@ class RTest:
             self.load()
             self.check()
 
+def read_config(fp):
+    config = bunch.Bunch()
+    g = yaml.safe_load_all(fp)
+    for new in g:
+        print bunch.bunchify(new)
+        config.update(bunch.bunchify(new))
+    return config
+
+str_config_opts = [
+                'user_id',
+                'access_key',
+                'secret_key',
+                'host',
+                ]
+
+int_config_opts = [
+                'port',
+                ]
+
+bool_config_opts = [
+                'is_secure',
+                ]
+
+def dict_find(d, k):
+    if d.has_key(k):
+        return d[k]
+    return None
+
 class RagweedEnv:
     def __init__(self):
-        access_key = os.environ['S3_ACCESS_KEY_ID']
-        secret_key = os.environ['S3_SECRET_ACCESS_KEY']
-        host = os.environ['S3_HOSTNAME']
+        self.config = bunch.Bunch()
 
-        self.conn = RGWConnection(access_key, secret_key, host)
+        cfg = ConfigParser.RawConfigParser()
+        try:
+            path = os.environ['RAGWEED_CONF']
+        except KeyError:
+            raise RuntimeError(
+                'To run tests, point environment '
+                + 'variable RAGWEED_CONF to a config file.',
+                )
+        with file(path) as f:
+            cfg.readfp(f)
+
+        for section in cfg.sections():
+            try:
+                (section_type, name) = section.split(None, 1)
+                if not self.config.has_key(section_type):
+                    self.config[section_type] = bunch.Bunch()
+                self.config[section_type][name] = bunch.Bunch()
+                cur = self.config[section_type]
+            except ValueError:
+                section_type = ''
+                name = section
+                self.config[name] = bunch.Bunch()
+                cur = self.config
+
+            cur[name] = bunch.Bunch()
+
+            for var in str_config_opts:
+                try:
+                    cur[name][var] = cfg.get(section, var)
+                except ConfigParser.NoOptionError:
+                    pass
+
+            for var in int_config_opts:
+                try:
+                    cur[name][var] = cfg.getint(section, var)
+                except ConfigParser.NoOptionError:
+                    pass
+
+            for var in bool_config_opts:
+                try:
+                    cur[name][var] = cfg.getboolean(section, var)
+                except ConfigParser.NoOptionError:
+                    pass
+
+        print json.dumps(self.config)
+
+        rgw_conf = self.config.rgw
+
+        self.conn = bunch.Bunch()
+
+        for (k, u) in self.config.user.iteritems():
+            self.conn[k] = RGWConnection(u.access_key, u.secret_key, rgw_conf.host, dict_find(rgw_conf, 'port'), dict_find(rgw_conf, 'is_secure'))
+
         self.suite = RSuite('ragweed', self.conn, os.environ['RAGWEED_RUN'])
-
-        print self.suite
 
 
 
