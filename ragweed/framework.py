@@ -42,11 +42,15 @@ class RGWRESTAdmin:
     def __init__(self, connection):
         self.conn = connection
 
-    def read_meta_key(self, key):
-        r = _make_admin_request(self.conn, "GET", '/admin/metadata', {'key': key})
+    def get_resource(self, path, params):
+        r = _make_admin_request(self.conn, "GET", path, params)
         if r.status != 200:
-            raise boto.exception.S3ResponseError()
+            raise boto.exception.S3ResponseError(r.status, r.reason)
         return bunch.bunchify(json.loads(r.read()))
+
+
+    def read_meta_key(self, key):
+        return self.get_resource('/admin/metadata', {'key': key})
 
     def get_bucket_entrypoint(self, bucket_name):
         return self.read_meta_key('bucket:' + bucket_name)
@@ -57,6 +61,10 @@ class RGWRESTAdmin:
             print ep
             bucket_id = ep.data.bucket.bucket_id
         return self.read_meta_key('bucket.instance:' + bucket_name + ":" + bucket_id)
+
+    def get_zone_params(self):
+        return self.get_resource('/admin/config', {'type': 'zone'})
+
 
 class RSuite:
     def __init__(self, name, conn, suite_step):
@@ -251,6 +259,12 @@ class RagweedEnv:
 
         self.suite = RSuite('ragweed', self.conn, os.environ['RAGWEED_RUN'])
         self.rgw_rest_admin = RGWRESTAdmin(self.conn.system)
+
+        self.zone_params = self.rgw_rest_admin.get_zone_params()
+
+        print 'zone_params:', self.zone_params
+
+
 
 
 def setup_module():
