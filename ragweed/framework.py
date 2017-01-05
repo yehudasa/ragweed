@@ -12,11 +12,16 @@ from boto.s3.key import Key
 from nose.plugins.attrib import attr
 from nose.tools import eq_ as eq
 
+from .reqs import _make_admin_request
+
 ragweed_env = None
 suite = None
 
 class RGWConnection:
     def __init__(self, access_key, secret_key, host, port, is_secure):
+        self.host = host
+        self.port = port
+        self.is_secure = is_secure
         self.conn = boto.connect_s3(
                 aws_access_key_id = access_key,
                 aws_secret_access_key = secret_key,
@@ -29,9 +34,29 @@ class RGWConnection:
     def create_bucket(self, name):
         return self.conn.create_bucket(name)
 
-    def get_bucket(self, name):
-        return self.conn.get_bucket(name)
+    def get_bucket(self, name, validate=True):
+        return self.conn.get_bucket(name, validate=validate)
 
+
+class RGWRESTAdmin:
+    def __init__(self, connection):
+        self.conn = connection
+
+    def read_meta_key(self, key):
+        r = _make_admin_request(self.conn, "GET", '/admin/metadata', {'key': key})
+        if r.status != 200:
+            raise boto.exception.S3ResponseError()
+        return bunch.bunchify(json.loads(r.read()))
+
+    def get_bucket_entrypoint(self, bucket_name):
+        return self.read_meta_key('bucket:' + bucket_name)
+
+    def get_bucket_instance_info(self, bucket_name, bucket_id = None):
+        if not bucket_id:
+            ep = self.get_bucket_entrypoint(bucket_name)
+            print ep
+            bucket_id = ep.data.bucket.bucket_id
+        return self.read_meta_key('bucket.instance:' + bucket_name + ":" + bucket_id)
 
 class RSuite:
     def __init__(self, name, conn, suite_step):
@@ -225,7 +250,7 @@ class RagweedEnv:
             self.conn[k] = RGWConnection(u.access_key, u.secret_key, rgw_conf.host, dict_find(rgw_conf, 'port'), dict_find(rgw_conf, 'is_secure'))
 
         self.suite = RSuite('ragweed', self.conn, os.environ['RAGWEED_RUN'])
-
+        self.rgw_rest_admin = RGWRESTAdmin(self.conn.system)
 
 
 def setup_module():

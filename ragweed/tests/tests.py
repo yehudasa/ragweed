@@ -1,4 +1,9 @@
+import ragweed.framework
+
 from ragweed.framework import *
+
+def rgwa():
+    return ragweed.framework.ragweed_env.rgw_rest_admin
 
 class r_test_small_obj_data(RTest):
     def stage(self):
@@ -9,6 +14,7 @@ class r_test_small_obj_data(RTest):
 
         for size in sizes:
             bucket = self.create_bucket()
+            ep = rgwa().get_bucket_instance_info(bucket.name)
             self.r_bucket_sizes[bucket.name] = size
             data = '0' * size
             for n in self.r_obj_names:
