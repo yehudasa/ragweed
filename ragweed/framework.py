@@ -62,6 +62,16 @@ class RGWRESTAdmin:
             bucket_id = ep.data.bucket.bucket_id
         return self.read_meta_key('bucket.instance:' + bucket_name + ":" + bucket_id)
 
+    def get_obj_layout(self, key):
+        path = '/' + key.bucket.name + '/' + key.name
+        params = {'layout': None}
+        if key.version_id is not None:
+            params['versionId'] = key.version_id
+
+        print params
+
+        return self.get_resource(path, params)
+
     def get_zone_params(self):
         return self.get_resource('/admin/config', {'type': 'zone'})
 

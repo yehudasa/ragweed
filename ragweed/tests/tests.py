@@ -22,6 +22,8 @@ class r_test_small_obj_data(RTest):
                 obj.key = n;
                 obj.set_contents_from_string(data)
 
+                print rgwa().get_obj_layout(obj)
+
     def check(self):
         print self.r_obj_names
         for bucket in self.get_buckets():
