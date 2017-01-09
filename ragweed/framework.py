@@ -8,6 +8,7 @@ import pickle
 import bunch
 import yaml
 import ConfigParser
+import rados
 from boto.s3.key import Key
 from nose.plugins.attrib import attr
 from nose.tools import eq_ as eq
@@ -195,6 +196,7 @@ str_config_opts = [
                 'access_key',
                 'secret_key',
                 'host',
+                'ceph_conf',
                 ]
 
 int_config_opts = [
@@ -274,7 +276,20 @@ class RagweedEnv:
 
         print 'zone_params:', self.zone_params
 
+        try:
+            self.ceph_conf = self.config.rados.ceph_conf
+        except:
+            raise RuntimeError(
+                'ceph_conf is missing under the [rados] section in ' + os.environ['RAGWEED_CONF']
+                )
 
+        self.rados = rados.Rados(conffile=self.ceph_conf)
+        self.rados.connect()
+
+        pools = self.rados.list_pools()
+
+        for pool in pools:
+             print "rados pool>", pool
 
 
 def setup_module():
