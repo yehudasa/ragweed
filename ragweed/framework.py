@@ -78,9 +78,9 @@ class RGWRESTAdmin:
 
 
 class RSuite:
-    def __init__(self, name, conn, suite_step):
+    def __init__(self, name, zone, suite_step):
         self.name = name
-        self.conn = conn
+        self.zone = zone
         self.config_bucket = None
         self.rtests = []
         self.do_staging = False
@@ -88,19 +88,13 @@ class RSuite:
         for step in suite_step.split(','):
             if step == 'stage' or step == 'staging':
                 self.do_staging = True
-                self.config_bucket = self.create_bucket(self.get_bucket_name('conf'))
+                self.config_bucket = self.zone.create_bucket(self.get_bucket_name('conf'))
             if step == 'check' or step == 'test':
                 self.do_check = True
-                self.config_bucket = self.get_bucket(self.get_bucket_name('conf'))
+                self.config_bucket = self.zone.get_bucket(self.get_bucket_name('conf'))
 
     def get_bucket_name(self, suffix):
         return self.name + '-' + suffix
-
-    def create_bucket(self, name):
-        return self.conn.regular.create_bucket(name)
-
-    def get_bucket(self, name):
-        return self.conn.regular.get_bucket(name)
 
     def register_test(self, t):
         self.rtests.append(t)
@@ -134,6 +128,40 @@ def rtest_decode_json(d):
         return pickle.loads(str(d['__pickle']))
     return d
 
+
+class RBucket:
+    def __init__(self, bucket, bucket_info):
+        self.bucket = bucket
+        self.name = bucket.name
+        self.bucket_info = bucket_info
+
+class RZone:
+    def __init__(self, conn):
+        self.conn = conn
+
+        self.rgw_rest_admin = RGWRESTAdmin(self.conn.system)
+        self.zone_params = self.rgw_rest_admin.get_zone_params()
+
+        print 'zone_params:', self.zone_params
+
+    def create_bucket(self, name):
+        bucket  = self.conn.regular.create_bucket(name)
+        bucket_info = self.rgw_rest_admin.get_bucket_instance_info(bucket.name)
+        return RBucket(bucket, bucket_info)
+
+    def get_bucket(self, name):
+        bucket = self.get_raw_bucket(name)
+        bucket_info = self.rgw_rest_admin.get_bucket_instance_info(bucket.name)
+        return RBucket(bucket, bucket_info)
+
+    def get_raw_bucket(self, name):
+        return self.conn.regular.get_bucket(name)
+
+    def refresh_rbucket(self, rbucket):
+        rbucket.bucket = self.get_raw_bucket(rbucket.bucket.name)
+        rbucket.bucket_info = self.rgw_rest_admin.get_bucket_instance_info(rbucket.bucket.name)
+
+
 class RTest:
     def __init__(self):
         self._name = self.__class__.__name__
@@ -141,13 +169,14 @@ class RTest:
 
     def create_bucket(self):
         bid = len(self.r_buckets) + 1
-        bucket = suite.create_bucket(suite.get_bucket_name(self._name + '-' + str(bid)))
-        self.r_buckets.append(bucket.name)
-        return bucket
+        rb = suite.zone.create_bucket(suite.get_bucket_name(self._name + '-' + str(bid)))
+        self.r_buckets.append(rb)
+
+        return rb
 
     def get_buckets(self):
-        for b in self.r_buckets:
-            yield suite.get_bucket(b)
+        for rb in self.r_buckets:
+            yield rb
 
     def stage(self):
         pass
@@ -172,6 +201,9 @@ class RTest:
 
     def load(self):
         suite.read_test_data(self)
+        for rb in self.r_buckets:
+            suite.zone.refresh_rbucket(rb)
+            yield rb
 
     def test(self):
         suite.register_test(self)
@@ -264,17 +296,12 @@ class RagweedEnv:
 
         rgw_conf = self.config.rgw
 
-        self.conn = bunch.Bunch()
-
+        conn = bunch.Bunch()
         for (k, u) in self.config.user.iteritems():
-            self.conn[k] = RGWConnection(u.access_key, u.secret_key, rgw_conf.host, dict_find(rgw_conf, 'port'), dict_find(rgw_conf, 'is_secure'))
+            conn[k] = RGWConnection(u.access_key, u.secret_key, rgw_conf.host, dict_find(rgw_conf, 'port'), dict_find(rgw_conf, 'is_secure'))
 
-        self.suite = RSuite('ragweed', self.conn, os.environ['RAGWEED_RUN'])
-        self.rgw_rest_admin = RGWRESTAdmin(self.conn.system)
-
-        self.zone_params = self.rgw_rest_admin.get_zone_params()
-
-        print 'zone_params:', self.zone_params
+        self.zone = RZone(conn)
+        self.suite = RSuite('ragweed', self.zone, os.environ['RAGWEED_RUN'])
 
         try:
             self.ceph_conf = self.config.rados.ceph_conf
