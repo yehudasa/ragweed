@@ -46,6 +46,20 @@ def validate_obj_location(rbucket, obj):
 
         eq(size, o.loc_ofs + o.loc_size)
 
+
+def validate_obj(rbucket, obj_name, expected_md5):
+    b = rbucket.bucket
+
+    obj = b.get_key(obj_name)
+
+    validate_obj_location(rbucket, obj)
+    h = hashlib.md5()
+    h.update(obj.get_contents_as_string())
+    obj_md5 = h.hexdigest()
+    print 'read md5: ' + obj_md5
+    eq(obj_md5, expected_md5)
+
+
 def gen_rand_string(size, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
@@ -118,14 +132,5 @@ class r_test_multipart_simple(RTest):
         for rb in self.get_buckets():
             break
 
-        b = rb.bucket
-
-        obj = b.get_key(self.r_obj)
-
-        validate_obj_location(rb, obj)
-        h = hashlib.md5()
-        h.update(obj.get_contents_as_string())
-        obj_md5 = h.hexdigest()
-        print 'read md5: ' + obj_md5
-        eq(obj_md5, self.r_md5)
+        validate_obj(rb, self.r_obj, self.r_md5)
 
