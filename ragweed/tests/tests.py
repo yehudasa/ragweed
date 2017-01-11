@@ -98,6 +98,43 @@ class r_test_small_obj_data(RTest):
 
                 validate_obj_location(rbucket, obj)
 
+class MultipartUploader:
+    def __init__(self, rbucket, obj_name, size, part_size):
+        self.rbucket = rbucket
+        self.obj_name = obj_name
+        self.size = size
+        self.part_size = part_size
+
+    def prepare(self):
+        self.mp = self.rbucket.bucket.initiate_multipart_upload(self.obj_name)
+        self.md5h = hashlib.md5()
+
+    def upload(self):
+        num_parts = self.size / self.part_size
+
+        payload=gen_rand_string(self.part_size / (1024 * 1024))*1024*1024
+
+        for i in xrange(0, num_parts):
+            self.mp.upload_part_from_file(StringIO(payload), i + 1)
+            self.md5h.update(payload)
+
+
+        last_part_size = self.size % self.part_size
+
+        if last_part_size > 0:
+            last_payload='1'*last_part_size
+
+            self.mp.upload_part_from_file(StringIO(last_payload), num_parts + 1)
+            self.md5h.update(last_payload)
+
+    def complete(self):
+        self.mp.complete_upload()
+
+    def hexdigest(self):
+        return self.md5h.hexdigest()
+
+
+
 # stage:
 # init, upload, and complete a multipart object
 # check:
@@ -108,24 +145,13 @@ class r_test_multipart_simple(RTest):
         rb = self.create_bucket()
         self.r_obj = 'foo'
 
-        num_parts = 3
+        uploader = MultipartUploader(rb, 'foo', 18 * 1024 * 1024, 5 * 1024 * 1024)
 
-        b = rb.bucket
+        uploader.prepare()
+        uploader.upload()
+        uploader.complete()
 
-        h = hashlib.md5()
-        payload=gen_rand_string(5)*1024*1024
-        mp = b.initiate_multipart_upload(self.r_obj)
-        for i in range(0, num_parts):
-            mp.upload_part_from_file(StringIO(payload), i+1)
-            h.update(payload)
-
-        last_payload='123'*1024*1024
-        mp.upload_part_from_file(StringIO(last_payload), num_parts + 1)
-        h.update(last_payload)
-
-        mp.complete_upload()
-
-        self.r_md5 = h.hexdigest()
+        self.r_md5 = uploader.hexdigest()
         print 'written md5: ' + self.r_md5
 
     def check(self):
