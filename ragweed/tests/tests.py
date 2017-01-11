@@ -1,4 +1,9 @@
+from cStringIO import StringIO
 import ragweed.framework
+import hashlib
+import string
+import random
+
 
 from ragweed.framework import *
 
@@ -22,6 +27,9 @@ def validate_obj_location(rbucket, obj):
         print 'ofs=', o.ofs, 'loc', o.loc
         if o.ofs > 0 or o.loc.oid != obj_layout.head.oid:
             eq(o.loc.pool, expected_tail_pool)
+
+def gen_rand_string(size, chars=string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for _ in range(size))
 
 # stage:
 # create objects in multiple sizes, with various names
@@ -58,4 +66,48 @@ class r_test_small_obj_data(RTest):
 
                 validate_obj_location(rbucket, obj)
 
+# stage:
+# init, upload, and complete a multipart object
+# check:
+# verify data correctness
+# verify that object layout is correct
+class r_test_multipart_simple(RTest):
+    def stage(self):
+        rb = self.create_bucket()
+        self.r_obj = 'foo'
+
+        num_parts = 3
+
+        b = rb.bucket
+
+        h = hashlib.md5()
+        payload=gen_rand_string(5)*1024*1024
+        mp = b.initiate_multipart_upload(self.r_obj)
+        for i in range(0, num_parts):
+            mp.upload_part_from_file(StringIO(payload), i+1)
+            h.update(payload)
+
+        last_payload='123'*1024*1024
+        mp.upload_part_from_file(StringIO(last_payload), num_parts + 1)
+        h.update(last_payload)
+
+        mp.complete_upload()
+
+        self.r_md5 = h.hexdigest()
+        print 'written md5: ' + self.r_md5
+
+    def check(self):
+        for rb in self.get_buckets():
+            break
+
+        b = rb.bucket
+
+        obj = b.get_key(self.r_obj)
+
+        validate_obj_location(rb, obj)
+        h = hashlib.md5()
+        h.update(obj.get_contents_as_string())
+        obj_md5 = h.hexdigest()
+        print 'read md5: ' + obj_md5
+        eq(obj_md5, self.r_md5)
 
