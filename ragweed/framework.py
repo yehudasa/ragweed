@@ -61,7 +61,8 @@ class RGWRESTAdmin:
             ep = self.get_bucket_entrypoint(bucket_name)
             print ep
             bucket_id = ep.data.bucket.bucket_id
-        return self.read_meta_key('bucket.instance:' + bucket_name + ":" + bucket_id)
+        result = self.read_meta_key('bucket.instance:' + bucket_name + ":" + bucket_id)
+        return result.data.bucket_info
 
     def get_obj_layout(self, key):
         path = '/' + key.bucket.name + '/' + key.name
@@ -88,10 +89,10 @@ class RSuite:
         for step in suite_step.split(','):
             if step == 'stage' or step == 'staging':
                 self.do_staging = True
-                self.config_bucket = self.zone.create_bucket(self.get_bucket_name('conf'))
+                self.config_bucket = self.zone.create_raw_bucket(self.get_bucket_name('conf'))
             if step == 'check' or step == 'test':
                 self.do_check = True
-                self.config_bucket = self.zone.get_bucket(self.get_bucket_name('conf'))
+                self.config_bucket = self.zone.get_raw_bucket(self.get_bucket_name('conf'))
 
     def get_bucket_name(self, suffix):
         return self.name + '-' + suffix
@@ -130,10 +131,30 @@ def rtest_decode_json(d):
 
 
 class RBucket:
-    def __init__(self, bucket, bucket_info):
+    def __init__(self, zone, bucket, bucket_info):
+        self.zone = zone
         self.bucket = bucket
         self.name = bucket.name
         self.bucket_info = bucket_info
+
+    def get_data_pool(self):
+        explicit_pool = self.bucket_info.bucket.explicit_placement.data_pool
+        if explicit_pool is not None and explicit_pool != '':
+            return explicit_pool
+        return self.zone.get_placement_target(self.bucket_info.placement_rule).data_pool
+
+    def get_tail_pool(self, obj_layout):
+        try:
+            placement_rule = obj_layout.manifest.tail_placement.placement_rule
+        except:
+            placement_rule = ''
+        if placement_rule == '':
+                try:
+                    return obj_layout.manifest.tail_placement.bucket.explicit_placement
+                except:
+                    pass
+
+        return self.zone.get_placement_target(placement_rule).data_pool
 
 class RZone:
     def __init__(self, conn):
@@ -142,17 +163,39 @@ class RZone:
         self.rgw_rest_admin = RGWRESTAdmin(self.conn.system)
         self.zone_params = self.rgw_rest_admin.get_zone_params()
 
+        self.placement_targets = {}
+
+        for e in self.zone_params.placement_pools:
+            self.placement_targets[e.key] = e.val
+
         print 'zone_params:', self.zone_params
 
+    def get_placement_target(self, placement_id):
+        plid = placement_id
+        if placement_id is None or placement_id == '':
+            plid = zone_params.default_placement
+
+        try:
+            return self.placement_targets[plid]
+        except:
+            pass
+
+        return None
+
     def create_bucket(self, name):
-        bucket  = self.conn.regular.create_bucket(name)
+        bucket = self.create_raw_bucket(name)
         bucket_info = self.rgw_rest_admin.get_bucket_instance_info(bucket.name)
-        return RBucket(bucket, bucket_info)
+        print 'bucket_info:', bucket_info
+        return RBucket(self, bucket, bucket_info)
 
     def get_bucket(self, name):
         bucket = self.get_raw_bucket(name)
         bucket_info = self.rgw_rest_admin.get_bucket_instance_info(bucket.name)
-        return RBucket(bucket, bucket_info)
+        print 'bucket_info:', bucket_info
+        return RBucket(self, bucket, bucket_info)
+
+    def create_raw_bucket(self, name):
+        return self.conn.regular.create_bucket(name)
 
     def get_raw_bucket(self, name):
         return self.conn.regular.get_bucket(name)
