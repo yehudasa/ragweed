@@ -10,8 +10,12 @@ from ragweed.framework import *
 def rgwa():
     return ragweed.framework.ragweed_env.zone.rgw_rest_admin
 
+def get_pool_ioctx(pool_name):
+    return ragweed.framework.ragweed_env.rados.open_ioctx(pool_name)
+
 def validate_obj_location(rbucket, obj):
     expected_head_pool = rbucket.get_data_pool()
+    head_pool_ioctx = get_pool_ioctx(expected_head_pool)
     print 'expected head pool: ' + expected_head_pool
 
     obj_layout = rgwa().get_obj_layout(obj)
@@ -20,13 +24,27 @@ def validate_obj_location(rbucket, obj):
 
     print 'head', obj_layout.head
     expected_tail_pool = rbucket.get_tail_pool(obj_layout)
+    tail_pool_ioctx = get_pool_ioctx(expected_tail_pool)
 
     eq(obj_layout.head.pool, expected_head_pool)
 
+    # check rados object for head exists
+    head_pool_ioctx.set_locator_key(obj_layout.head.loc)
+    (size, mtime) = head_pool_ioctx.stat(obj_layout.head.oid)
+    print 'head size:', size, 'mtime:', mtime
+
+    # check tail
     for o in obj_layout.data_location:
+        print 'o=', o
         print 'ofs=', o.ofs, 'loc', o.loc
         if o.ofs > 0 or o.loc.oid != obj_layout.head.oid:
             eq(o.loc.pool, expected_tail_pool)
+
+        # validate rados object exists
+        tail_pool_ioctx.set_locator_key(o.loc.loc)
+        (size, mtime) = tail_pool_ioctx.stat(o.loc.oid)
+
+        eq(size, o.loc_ofs + o.loc_size)
 
 def gen_rand_string(size, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
