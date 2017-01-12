@@ -209,6 +209,7 @@ class RTest:
     def __init__(self):
         self._name = self.__class__.__name__
         self.r_buckets = []
+        self.init()
 
     def create_bucket(self):
         bid = len(self.r_buckets) + 1
@@ -220,6 +221,9 @@ class RTest:
     def get_buckets(self):
         for rb in self.r_buckets:
             yield rb
+
+    def init(self):
+        pass
 
     def stage(self):
         pass

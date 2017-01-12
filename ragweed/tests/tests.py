@@ -1,6 +1,6 @@
 from cStringIO import StringIO
 import ragweed.framework
-import hashlib
+import binascii
 import string
 import random
 
@@ -47,17 +47,16 @@ def validate_obj_location(rbucket, obj):
         eq(size, o.loc_ofs + o.loc_size)
 
 
-def validate_obj(rbucket, obj_name, expected_md5):
+def validate_obj(rbucket, obj_name, expected_crc):
     b = rbucket.bucket
 
     obj = b.get_key(obj_name)
 
     validate_obj_location(rbucket, obj)
-    h = hashlib.md5()
-    h.update(obj.get_contents_as_string())
-    obj_md5 = h.hexdigest()
-    print 'read md5: ' + obj_md5
-    eq(obj_md5, expected_md5)
+    crc = binascii.crc32(obj.get_contents_as_string())
+    obj_crc = '{:#010x}'.format(crc)
+    print 'read crc: ' + obj_crc
+    eq(obj_crc, expected_crc)
 
 
 def gen_rand_string(size, chars=string.ascii_uppercase + string.digits):
@@ -98,16 +97,30 @@ class r_test_small_obj_data(RTest):
 
                 validate_obj_location(rbucket, obj)
 
+class MultipartUploaderState:
+    def __init__(self, mu):
+        self.upload_id = mu.mp.id
+        self.crc = mu.crc
+
+
 class MultipartUploader:
-    def __init__(self, rbucket, obj_name, size, part_size):
+    def __init__(self, rbucket, obj_name, size, part_size, state=None):
         self.rbucket = rbucket
         self.obj_name = obj_name
         self.size = size
         self.part_size = part_size
+        self.crc = 0
+
+        if state is not None:
+            self.crc = state.crc
+
+            for upload in rbucket.bucket.list_multipart_uploads():
+                if upload.key_name == self.obj_name and upload.id == state.upload_id:
+                    self.mp = upload
 
     def prepare(self):
         self.mp = self.rbucket.bucket.initiate_multipart_upload(self.obj_name)
-        self.md5h = hashlib.md5()
+        self.crc = 0
 
     def upload(self):
         num_parts = self.size / self.part_size
@@ -116,7 +129,7 @@ class MultipartUploader:
 
         for i in xrange(0, num_parts):
             self.mp.upload_part_from_file(StringIO(payload), i + 1)
-            self.md5h.update(payload)
+            self.crc = binascii.crc32(payload, self.crc)
 
 
         last_part_size = self.size % self.part_size
@@ -125,13 +138,16 @@ class MultipartUploader:
             last_payload='1'*last_part_size
 
             self.mp.upload_part_from_file(StringIO(last_payload), num_parts + 1)
-            self.md5h.update(last_payload)
+            self.crc = binascii.crc32(last_payload, self.crc)
 
     def complete(self):
         self.mp.complete_upload()
 
     def hexdigest(self):
-        return self.md5h.hexdigest()
+        return '{:#010x}'.format(self.crc)
+
+    def get_state(self):
+        return MultipartUploaderState(self)
 
 
 
@@ -145,18 +161,55 @@ class r_test_multipart_simple(RTest):
         rb = self.create_bucket()
         self.r_obj = 'foo'
 
-        uploader = MultipartUploader(rb, 'foo', 18 * 1024 * 1024, 5 * 1024 * 1024)
+        uploader = MultipartUploader(rb, self.r_obj, 18 * 1024 * 1024, 5 * 1024 * 1024)
 
         uploader.prepare()
         uploader.upload()
         uploader.complete()
 
-        self.r_md5 = uploader.hexdigest()
-        print 'written md5: ' + self.r_md5
+        self.r_crc = uploader.hexdigest()
+        print 'written crc: ' + self.r_crc
 
     def check(self):
         for rb in self.get_buckets():
             break
 
-        validate_obj(rb, self.r_obj, self.r_md5)
+        validate_obj(rb, self.r_obj, self.r_crc)
+
+
+# stage:
+# init, upload multipart object
+# check:
+# complete multipart
+# verify data correctness
+# verify that object layout is correct
+class r_test_multipart_defer_complete(RTest):
+    def init(self):
+        self.obj_size = 18 * 1024 * 1024
+        self.part_size = 5 * 1024 * 1024
+
+    def stage(self):
+        rb = self.create_bucket()
+        self.r_obj = 'foo'
+
+        uploader = MultipartUploader(rb, self.r_obj, self.obj_size, self.part_size)
+
+        uploader.prepare()
+        uploader.upload()
+
+        self.r_upload_state = uploader.get_state()
+
+
+    def check(self):
+        for rb in self.get_buckets():
+            break
+
+        uploader = MultipartUploader(rb, self.r_obj, self.obj_size, self.part_size,
+                                     state=self.r_upload_state)
+
+        uploader.complete()
+        crc = uploader.hexdigest()
+        print 'written crc: ' + crc
+
+        validate_obj(rb, self.r_obj, crc)
 
