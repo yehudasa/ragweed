@@ -101,6 +101,7 @@ class MultipartUploaderState:
     def __init__(self, mu):
         self.upload_id = mu.mp.id
         self.crc = mu.crc
+        self.cur_part = mu.cur_part
 
 
 class MultipartUploader:
@@ -110,35 +111,51 @@ class MultipartUploader:
         self.size = size
         self.part_size = part_size
         self.crc = 0
+        self.cur_part = 0
 
         if state is not None:
             self.crc = state.crc
+            self.cur_part = state.cur_part
 
             for upload in rbucket.bucket.list_multipart_uploads():
                 if upload.key_name == self.obj_name and upload.id == state.upload_id:
                     self.mp = upload
 
+        self.num_full_parts = self.size / self.part_size
+        self.last_part_size = self.size % self.part_size
+
+
     def prepare(self):
         self.mp = self.rbucket.bucket.initiate_multipart_upload(self.obj_name)
         self.crc = 0
+        self.cur_part = 0
 
     def upload(self):
-        num_parts = self.size / self.part_size
+        if self.cur_part > self.num_full_parts:
+            return False
 
-        payload=gen_rand_string(self.part_size / (1024 * 1024))*1024*1024
+        if self.cur_part < self.num_full_parts:
+            payload=gen_rand_string(self.part_size / (1024 * 1024)) * 1024 * 1024
 
-        for i in xrange(0, num_parts):
-            self.mp.upload_part_from_file(StringIO(payload), i + 1)
+            self.mp.upload_part_from_file(StringIO(payload), self.cur_part + 1)
             self.crc = binascii.crc32(payload, self.crc)
+            self.cur_part += 1
+
+            return True
 
 
-        last_part_size = self.size % self.part_size
+        if self.last_part_size > 0:
+            last_payload='1'*self.last_part_size
 
-        if last_part_size > 0:
-            last_payload='1'*last_part_size
-
-            self.mp.upload_part_from_file(StringIO(last_payload), num_parts + 1)
+            self.mp.upload_part_from_file(StringIO(last_payload), self.num_full_parts + 1)
             self.crc = binascii.crc32(last_payload, self.crc)
+            self.cur_part += 1
+
+        return False
+
+    def upload_all(self):
+        while self.upload():
+            pass
 
     def complete(self):
         self.mp.complete_upload()
@@ -157,14 +174,18 @@ class MultipartUploader:
 # verify data correctness
 # verify that object layout is correct
 class r_test_multipart_simple(RTest):
+    def init(self):
+        self.obj_size = 18 * 1024 * 1024
+        self.part_size = 5 * 1024 * 1024
+
     def stage(self):
         rb = self.create_bucket()
         self.r_obj = 'foo'
 
-        uploader = MultipartUploader(rb, self.r_obj, 18 * 1024 * 1024, 5 * 1024 * 1024)
+        uploader = MultipartUploader(rb, self.r_obj, self.obj_size, self.part_size)
 
         uploader.prepare()
-        uploader.upload()
+        uploader.upload_all()
         uploader.complete()
 
         self.r_crc = uploader.hexdigest()
@@ -173,6 +194,9 @@ class r_test_multipart_simple(RTest):
     def check(self):
         for rb in self.get_buckets():
             break
+
+        k = rb.bucket.get_key(self.r_obj)
+        eq(k.size, self.obj_size)
 
         validate_obj(rb, self.r_obj, self.r_crc)
 
@@ -195,7 +219,7 @@ class r_test_multipart_defer_complete(RTest):
         uploader = MultipartUploader(rb, self.r_obj, self.obj_size, self.part_size)
 
         uploader.prepare()
-        uploader.upload()
+        uploader.upload_all()
 
         self.r_upload_state = uploader.get_state()
 
@@ -210,6 +234,51 @@ class r_test_multipart_defer_complete(RTest):
         uploader.complete()
         crc = uploader.hexdigest()
         print 'written crc: ' + crc
+
+        k = rb.bucket.get_key(self.r_obj)
+        eq(k.size, self.obj_size)
+
+        validate_obj(rb, self.r_obj, crc)
+
+
+# stage:
+# init, upload multipart object
+# check:
+# complete multipart
+# verify data correctness
+# verify that object layout is correct
+class r_test_multipart_defer_update_complete(RTest):
+    def init(self):
+        self.obj_size = 18 * 1024 * 1024
+        self.part_size = 5 * 1024 * 1024
+
+    def stage(self):
+        rb = self.create_bucket()
+        self.r_obj = 'foo'
+
+        uploader = MultipartUploader(rb, self.r_obj, self.obj_size, self.part_size)
+
+        uploader.prepare()
+        ret = uploader.upload() # only upload one part
+        eq(ret, True)
+
+        self.r_upload_state = uploader.get_state()
+
+
+    def check(self):
+        for rb in self.get_buckets():
+            break
+
+        uploader = MultipartUploader(rb, self.r_obj, self.obj_size, self.part_size,
+                                     state=self.r_upload_state)
+
+        uploader.upload_all() # upload remaining
+        uploader.complete()
+        crc = uploader.hexdigest()
+        print 'written crc: ' + crc
+
+        k = rb.bucket.get_key(self.r_obj)
+        eq(k.size, self.obj_size)
 
         validate_obj(rb, self.r_obj, crc)
 
