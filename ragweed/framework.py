@@ -138,7 +138,12 @@ class RBucket:
         self.bucket_info = bucket_info
 
     def get_data_pool(self):
-        explicit_pool = self.bucket_info.bucket.explicit_placement.data_pool
+        try:
+            # old style explicit pool
+            explicit_pool = self.bucket_info.bucket.pool
+        except:
+            # new style explicit pool
+            explicit_pool = self.bucket_info.bucket.explicit_placement.data_pool
         if explicit_pool is not None and explicit_pool != '':
             return explicit_pool
         return self.zone.get_placement_target(self.bucket_info.placement_rule).data_pool
@@ -150,7 +155,14 @@ class RBucket:
             placement_rule = ''
         if placement_rule == '':
                 try:
+                    # new style
                     return obj_layout.manifest.tail_placement.bucket.explicit_placement
+                except:
+                    pass
+
+                try:
+                    # old style
+                    return obj_layout.manifest.tail_bucket.pool
                 except:
                     pass
 
@@ -173,7 +185,8 @@ class RZone:
     def get_placement_target(self, placement_id):
         plid = placement_id
         if placement_id is None or placement_id == '':
-            plid = zone_params.default_placement
+            print 'zone_params=', self.zone_params
+            plid = self.zone_params.default_placement
 
         try:
             return self.placement_targets[plid]

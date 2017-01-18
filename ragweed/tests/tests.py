@@ -7,11 +7,28 @@ import random
 
 from ragweed.framework import *
 
+class obj_placement:
+    def __init__(self, pool, oid, loc):
+        self.pool = pool
+        self.oid = oid
+        self.loc = loc
+
 def rgwa():
     return ragweed.framework.ragweed_env.zone.rgw_rest_admin
 
 def get_pool_ioctx(pool_name):
     return ragweed.framework.ragweed_env.rados.open_ioctx(pool_name)
+
+
+def get_placement(obj_json):
+    try:
+        return obj_placement(obj_json.pool, obj_json.oid, obj_json.loc)
+    except:
+        oid = obj_json.bucket.marker + '_' + obj_json.object
+        key = ''
+        if obj_json.key != '':
+            key = obj_json.bucket.marker + '_' + obj_json.key
+        return obj_placement(obj_json.bucket.pool, oid, key)
 
 def validate_obj_location(rbucket, obj):
     expected_head_pool = rbucket.get_data_pool()
@@ -26,23 +43,27 @@ def validate_obj_location(rbucket, obj):
     expected_tail_pool = rbucket.get_tail_pool(obj_layout)
     tail_pool_ioctx = get_pool_ioctx(expected_tail_pool)
 
-    eq(obj_layout.head.pool, expected_head_pool)
+    head_placement = get_placement(obj_layout.head)
+
+    eq(head_placement.pool, expected_head_pool)
 
     # check rados object for head exists
-    head_pool_ioctx.set_locator_key(obj_layout.head.loc)
-    (size, mtime) = head_pool_ioctx.stat(obj_layout.head.oid)
+    head_pool_ioctx.set_locator_key(head_placement.loc)
+    (size, mtime) = head_pool_ioctx.stat(head_placement.oid)
+
     print 'head size:', size, 'mtime:', mtime
 
     # check tail
     for o in obj_layout.data_location:
         print 'o=', o
         print 'ofs=', o.ofs, 'loc', o.loc
-        if o.ofs > 0 or o.loc.oid != obj_layout.head.oid:
-            eq(o.loc.pool, expected_tail_pool)
+        placement = get_placement(o.loc)
+        if o.ofs > 0 or placement.oid != head_placement.oid:
+            eq(placement.pool, expected_tail_pool)
 
         # validate rados object exists
-        tail_pool_ioctx.set_locator_key(o.loc.loc)
-        (size, mtime) = tail_pool_ioctx.stat(o.loc.oid)
+        tail_pool_ioctx.set_locator_key(placement.loc)
+        (size, mtime) = tail_pool_ioctx.stat(placement.oid)
 
         eq(size, o.loc_ofs + o.loc_size)
 
