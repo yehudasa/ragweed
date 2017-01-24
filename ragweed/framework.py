@@ -79,8 +79,9 @@ class RGWRESTAdmin:
 
 
 class RSuite:
-    def __init__(self, name, zone, suite_step):
+    def __init__(self, name, bucket_prefix, zone, suite_step):
         self.name = name
+        self.bucket_prefix = bucket_prefix
         self.zone = zone
         self.config_bucket = None
         self.rtests = []
@@ -95,7 +96,7 @@ class RSuite:
                 self.config_bucket = self.zone.get_raw_bucket(self.get_bucket_name('conf'))
 
     def get_bucket_name(self, suffix):
-        return self.name + '-' + suffix
+        return self.bucket_prefix + '-' + suffix
 
     def register_test(self, t):
         self.rtests.append(t)
@@ -289,6 +290,7 @@ str_config_opts = [
                 'secret_key',
                 'host',
                 'ceph_conf',
+                'bucket_prefix',
                 ]
 
 int_config_opts = [
@@ -356,12 +358,17 @@ class RagweedEnv:
 
         rgw_conf = self.config.rgw
 
+        try:
+            self.bucket_prefix = rgw_conf.bucket_prefix
+        except:
+            self.bucket_prefix = 'ragweed'
+
         conn = bunch.Bunch()
         for (k, u) in self.config.user.iteritems():
             conn[k] = RGWConnection(u.access_key, u.secret_key, rgw_conf.host, dict_find(rgw_conf, 'port'), dict_find(rgw_conf, 'is_secure'))
 
         self.zone = RZone(conn)
-        self.suite = RSuite('ragweed', self.zone, os.environ['RAGWEED_RUN'])
+        self.suite = RSuite('ragweed', self.bucket_prefix, self.zone, os.environ['RAGWEED_RUN'])
 
         try:
             self.ceph_conf = self.config.rados.ceph_conf
@@ -377,7 +384,6 @@ class RagweedEnv:
 
         for pool in pools:
              print "rados pool>", pool
-
 
 def setup_module():
     global ragweed_env
