@@ -85,11 +85,11 @@ class RSuite:
         self.zone = zone
         self.config_bucket = None
         self.rtests = []
-        self.do_staging = False
+        self.do_preparing = False
         self.do_check = False
         for step in suite_step.split(','):
-            if step == 'stage' or step == 'staging':
-                self.do_staging = True
+            if step == 'prepare':
+                self.do_preparing = True
                 self.config_bucket = self.zone.create_raw_bucket(self.get_bucket_name('conf'))
             if step == 'check' or step == 'test':
                 self.do_check = True
@@ -112,8 +112,8 @@ class RSuite:
         s = k.get_contents_as_string()
         test.from_json(s)
 
-    def is_staging(self):
-        return self.do_staging
+    def is_preparing(self):
+        return self.do_preparing
 
     def is_checking(self):
         return self.do_check
@@ -239,7 +239,7 @@ class RTest:
     def init(self):
         pass
 
-    def stage(self):
+    def prepare(self):
         pass
 
     def check(self):
@@ -268,8 +268,8 @@ class RTest:
 
     def test(self):
         suite.register_test(self)
-        if suite.is_staging():
-            self.stage()
+        if suite.is_preparing():
+            self.prepare()
             self.save()
 
         if suite.is_checking():
@@ -368,7 +368,7 @@ class RagweedEnv:
             conn[k] = RGWConnection(u.access_key, u.secret_key, rgw_conf.host, dict_find(rgw_conf, 'port'), dict_find(rgw_conf, 'is_secure'))
 
         self.zone = RZone(conn)
-        self.suite = RSuite('ragweed', self.bucket_prefix, self.zone, os.environ['RAGWEED_RUN'])
+        self.suite = RSuite('ragweed', self.bucket_prefix, self.zone, os.environ['RAGWEED_STAGES'])
 
         try:
             self.ceph_conf = self.config.rados.ceph_conf

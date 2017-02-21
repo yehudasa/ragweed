@@ -83,13 +83,13 @@ def validate_obj(rbucket, obj_name, expected_crc):
 def gen_rand_string(size, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
-# stage:
+# prepare:
 # create objects in multiple sizes, with various names
 # check:
 # verify data correctness
 # verify that objects were written to the expected data pool
 class r_test_small_obj_data(RTest):
-    def stage(self):
+    def prepare(self):
         self.r_obj_names = [ 'obj', '_', '__', '_ _' ]
         self.r_bucket_sizes = {}
 
@@ -189,7 +189,7 @@ class MultipartUploader:
 
 
 
-# stage:
+# prepare:
 # init, upload, and complete a multipart object
 # check:
 # verify data correctness
@@ -199,7 +199,7 @@ class r_test_multipart_simple(RTest):
         self.obj_size = 18 * 1024 * 1024
         self.part_size = 5 * 1024 * 1024
 
-    def stage(self):
+    def prepare(self):
         rb = self.create_bucket()
         self.r_obj = 'foo'
 
@@ -222,7 +222,7 @@ class r_test_multipart_simple(RTest):
         validate_obj(rb, self.r_obj, self.r_crc)
 
 
-# stage:
+# prepare:
 # init, upload multipart object
 # check:
 # complete multipart
@@ -233,7 +233,7 @@ class r_test_multipart_defer_complete(RTest):
         self.obj_size = 18 * 1024 * 1024
         self.part_size = 5 * 1024 * 1024
 
-    def stage(self):
+    def prepare(self):
         rb = self.create_bucket()
         self.r_obj = 'foo'
 
@@ -262,7 +262,7 @@ class r_test_multipart_defer_complete(RTest):
         validate_obj(rb, self.r_obj, crc)
 
 
-# stage:
+# prepare:
 # init, upload multipart object
 # check:
 # complete multipart
@@ -273,7 +273,7 @@ class r_test_multipart_defer_update_complete(RTest):
         self.obj_size = 18 * 1024 * 1024
         self.part_size = 5 * 1024 * 1024
 
-    def stage(self):
+    def prepare(self):
         rb = self.create_bucket()
         self.r_obj = 'foo'
 
