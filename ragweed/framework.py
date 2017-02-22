@@ -110,6 +110,7 @@ class RSuite:
         k = Key(self.config_bucket)
         k.key = 'tests/' + test._name
         s = k.get_contents_as_string()
+        print 'read_test_data=', s
         test.from_json(s)
 
     def is_preparing(self):
@@ -264,7 +265,6 @@ class RTest:
         suite.read_test_data(self)
         for rb in self.r_buckets:
             suite.zone.refresh_rbucket(rb)
-            yield rb
 
     def test(self):
         suite.register_test(self)
