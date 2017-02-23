@@ -158,7 +158,7 @@ class RBucket:
         if placement_rule == '':
                 try:
                     # new style
-                    return obj_layout.manifest.tail_placement.bucket.explicit_placement
+                    return obj_layout.manifest.tail_placement.bucket.explicit_placement.data_pool
                 except:
                     pass
 
