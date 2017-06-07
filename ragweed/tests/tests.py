@@ -221,6 +221,34 @@ class r_test_multipart_simple(RTest):
 
         validate_obj(rb, self.r_obj, self.r_crc)
 
+# prepare:
+# init, upload, and complete a multipart object
+# check:
+# part index is removed
+class r_test_multipart_index_versioning(RTest):
+    def init(self):
+        self.obj_size = 18 * 1024 * 1024
+        self.part_size = 5 * 1024 * 1024
+
+    def prepare(self):
+        rb = self.create_bucket()
+        rb.bucket.configure_versioning('true')
+        self.r_obj = 'foo'
+
+        uploader = MultipartUploader(rb, self.r_obj, self.obj_size, self.part_size)
+
+        uploader.prepare()
+        uploader.upload_all()
+        uploader.complete()
+
+    def check(self):
+        for rb in self.get_buckets():
+            break
+        index_check_result = rgwa().check_bucket_index(rb.name)
+        print index_check_result
+
+        eq(0, len(index_check_result))
+
 
 # prepare:
 # init, upload multipart object
