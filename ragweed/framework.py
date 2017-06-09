@@ -64,6 +64,9 @@ class RGWRESTAdmin:
         result = self.read_meta_key('bucket.instance:' + bucket_name + ":" + bucket_id)
         return result.data.bucket_info
 
+    def check_bucket_index(self, bucket_name):
+        return self.get_resource('/admin/bucket',{'index' : None, 'bucket':bucket_name})
+
     def get_obj_layout(self, key):
         path = '/' + key.bucket.name + '/' + key.name
         params = {'layout': None}
