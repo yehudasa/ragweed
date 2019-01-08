@@ -13,8 +13,11 @@ class obj_placement:
         self.oid = oid
         self.loc = loc
 
+def get_zone():
+    return ragweed.framework.ragweed_env.zone
+
 def rgwa():
-    return ragweed.framework.ragweed_env.zone.rgw_rest_admin
+    return get_zone().rgw_rest_admin
 
 def get_pool_ioctx(pool_name):
     return ragweed.framework.ragweed_env.rados.open_ioctx(pool_name)
@@ -39,6 +42,9 @@ def validate_obj_location(rbucket, obj):
 
     print 'layout', obj_layout
 
+    obj_size = obj_layout.manifest.obj_size
+    print 'obj_size', obj_size
+
     print 'head', obj_layout.head
     expected_tail_pool = rbucket.get_tail_pool(obj_layout)
     tail_pool_ioctx = get_pool_ioctx(expected_tail_pool)
@@ -58,14 +64,30 @@ def validate_obj_location(rbucket, obj):
         print 'o=', o
         print 'ofs=', o.ofs, 'loc', o.loc
         placement = get_placement(o.loc)
-        if o.ofs > 0 or placement.oid != head_placement.oid:
+        if o.ofs < obj_layout.manifest.head_size:
+            eq(placement.pool, expected_head_pool)
+            pool_ioctx = head_pool_ioctx
+        else:
             eq(placement.pool, expected_tail_pool)
+            pool_ioctx = tail_pool_ioctx
 
         # validate rados object exists
-        tail_pool_ioctx.set_locator_key(placement.loc)
-        (size, mtime) = tail_pool_ioctx.stat(placement.oid)
+        pool_ioctx.set_locator_key(placement.loc)
+        (size, mtime) = pool_ioctx.stat(placement.oid)
 
-        eq(size, o.loc_ofs + o.loc_size)
+        if o.ofs + o.loc_size > obj_size:
+            # radosgw get_obj_layout() request on previous versions could return bigger o.loc_size
+            # than actual at the end of the object. Fixed in later versions but need to adjust here
+            # for when running on older versions.
+            o.loc_size = obj_size - o.ofs
+
+        check_size = o.loc_ofs + o.loc_size
+
+        eq(size, check_size)
+
+def calc_crc(data):
+    crc = binascii.crc32(data)
+    return '{:#010x}'.format(crc)
 
 
 def validate_obj(rbucket, obj_name, expected_crc):
@@ -74,14 +96,34 @@ def validate_obj(rbucket, obj_name, expected_crc):
     obj = b.get_key(obj_name)
 
     validate_obj_location(rbucket, obj)
-    crc = binascii.crc32(obj.get_contents_as_string())
-    obj_crc = '{:#010x}'.format(crc)
-    print 'read crc: ' + obj_crc
+    obj_crc = calc_crc(obj.get_contents_as_string())
     eq(obj_crc, expected_crc)
 
 
+def generate_random(size):
+    """
+    Generate random data
+    (actually each MB is a repetition of the first KB)
+    """
+    chunk = 1024
+    allowed = string.ascii_letters
+    s = ''
+    strpart = ''.join([allowed[random.randint(0, len(allowed) - 1)] for _ in xrange(chunk)])
+
+    for y in range((size + chunk - 1) / chunk):
+        this_chunk_len = chunk
+
+        if len(s) + this_chunk_len > size:
+            this_chunk_len = size - len(s)
+            strpart = strpart[0:this_chunk_len]
+
+        s += strpart
+
+    return s
+
 def gen_rand_string(size, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
+
 
 # prepare:
 # create objects in multiple sizes, with various names
@@ -330,4 +372,47 @@ class r_test_multipart_defer_update_complete(RTest):
         eq(k.size, self.obj_size)
 
         validate_obj(rb, self.r_obj, crc)
+
+# prepare:
+# init, create obj in different storage classes
+# check:
+# verify rados objects in expected location
+class r_test_obj_storage_class(RTest):
+    def init(self):
+        self.obj_size = 10 * 1024 * 1024
+        self.obj_prefix = 'foo-'
+
+    def prepare(self):
+        rb = self.create_bucket()
+        zone = get_zone()
+
+        placement_target = zone.get_placement_target(rb.placement_rule.placement_id)
+
+        self.r_data = generate_random(self.obj_size)
+        self.r_crc = calc_crc(self.r_data)
+
+        self.r_storage_classes = []
+
+        for sc in placement_target.storage_classes.get_all():
+            self.r_storage_classes.append(sc)
+
+            obj = Key(rb.bucket)
+            obj.key = self.obj_prefix + sc
+            obj.storage_class = sc
+            obj.set_contents_from_string(self.r_data)
+
+
+    def check(self):
+        for rb in self.get_buckets():
+            break
+
+        for sc in self.r_storage_classes:
+            obj_name = self.obj_prefix + sc
+
+            k = rb.bucket.get_key(obj_name)
+            eq(k.size, self.obj_size)
+            eq(k.storage_class, sc)
+
+
+            validate_obj(rb, obj_name, self.r_crc)
 
