@@ -216,6 +216,10 @@ class RStorageClasses:
 
         return sc
 
+    def get_all(self):
+        for (name, _) in self.storage_classes.iteritems():
+            yield name
+
 class RPlacementTarget:
     def __init__(self, name, config):
         self.name = name
@@ -255,6 +259,9 @@ class RZone:
             pass
 
         return None
+
+    def get_default_placement(self):
+        return get_placement_target(self.zone_params.default_placement)
 
     def create_bucket(self, name):
         bucket = self.create_raw_bucket(name)
