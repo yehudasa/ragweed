@@ -168,11 +168,12 @@ class MultipartUploaderState:
 
 
 class MultipartUploader:
-    def __init__(self, rbucket, obj_name, size, part_size, state=None):
+    def __init__(self, rbucket, obj_name, size, part_size, storage_class=None, state=None):
         self.rbucket = rbucket
         self.obj_name = obj_name
         self.size = size
         self.part_size = part_size
+        self.storage_class = storage_class
         self.crc = 0
         self.cur_part = 0
 
@@ -189,7 +190,13 @@ class MultipartUploader:
 
 
     def prepare(self):
-        self.mp = self.rbucket.bucket.initiate_multipart_upload(self.obj_name)
+        headers = None
+        if self.storage_class is not None:
+            if not headers:
+                headers = {}
+            headers['X-Amz-Storage-Class'] = self.storage_class
+
+        self.mp = self.rbucket.bucket.initiate_multipart_upload(self.obj_name, headers = headers)
         self.crc = 0
         self.cur_part = 0
 
@@ -373,14 +380,16 @@ class r_test_multipart_defer_update_complete(RTest):
 
         validate_obj(rb, self.r_obj, crc)
 
+class ObjInfo(object):
+    pass
+
 # prepare:
 # init, create obj in different storage classes
 # check:
-# verify rados objects in expected location
+# verify rados objects data, and in expected location
 class r_test_obj_storage_class(RTest):
     def init(self):
         self.obj_size = 10 * 1024 * 1024
-        self.obj_prefix = 'foo-'
 
     def prepare(self):
         rb = self.create_bucket()
@@ -388,31 +397,207 @@ class r_test_obj_storage_class(RTest):
 
         placement_target = zone.get_placement_target(rb.placement_rule.placement_id)
 
-        self.r_data = generate_random(self.obj_size)
-        self.r_crc = calc_crc(self.r_data)
+        data = generate_random(self.obj_size)
+        crc = calc_crc(data)
 
-        self.r_storage_classes = []
+        self.r_objs = []
 
         for sc in placement_target.storage_classes.get_all():
-            self.r_storage_classes.append(sc)
+            obj_info = ObjInfo()
+
+            obj_info.storage_class = sc
+            obj_info.name = 'foo-' + sc
+            obj_info.obj_size = self.obj_size
+            obj_info.crc = crc
 
             obj = Key(rb.bucket)
-            obj.key = self.obj_prefix + sc
+            obj.key = obj_info.name
             obj.storage_class = sc
-            obj.set_contents_from_string(self.r_data)
+            obj.set_contents_from_string(data)
+
+            self.r_objs.append(obj_info)
 
 
     def check(self):
         for rb in self.get_buckets():
             break
 
-        for sc in self.r_storage_classes:
-            obj_name = self.obj_prefix + sc
+        for obj_info in self.r_objs:
+            k = rb.bucket.get_key(obj_info.name)
+            eq(k.size, obj_info.obj_size)
+            eq(k.storage_class, obj_info.storage_class)
 
-            k = rb.bucket.get_key(obj_name)
+
+            validate_obj(rb, obj_info.name, obj_info.crc)
+
+# prepare:
+# init, start multipart obj creation in different storage classes
+# check:
+# complete uploads, verify rados objects data, and in expected location
+class r_test_obj_storage_class_multipart(RTest):
+    def init(self):
+        self.obj_size = 11 * 1024 * 1024
+        self.part_size = 5 * 1024 * 1024
+
+    def prepare(self):
+        rb = self.create_bucket()
+
+        self.r_objs = []
+
+        zone = get_zone()
+        placement_target = zone.get_placement_target(rb.placement_rule.placement_id)
+
+        for sc in placement_target.storage_classes.get_all():
+            obj_info = ObjInfo()
+
+            obj_info.storage_class = sc
+            obj_info.name = 'foo-' + sc
+            obj_info.obj_size = self.obj_size
+            obj_info.part_size = self.part_size
+
+            uploader = MultipartUploader(rb, obj_info.name, self.obj_size, self.part_size, storage_class=sc)
+
+            uploader.prepare()
+            uploader.upload_all()
+
+            obj_info.upload_state = uploader.get_state()
+
+            self.r_objs.append(obj_info)
+
+
+    def check(self):
+        for rb in self.get_buckets():
+            break
+
+        for obj_info in self.r_objs:
+            uploader = MultipartUploader(rb, obj_info.name, obj_info.obj_size,
+                                         obj_info.part_size, state=obj_info.upload_state)
+
+            uploader.complete()
+            crc = uploader.hexdigest()
+            print 'written crc: ' + crc
+
+            k = rb.bucket.get_key(obj_info.name)
             eq(k.size, self.obj_size)
-            eq(k.storage_class, sc)
+            eq(k.storage_class, obj_info.storage_class)
+
+            validate_obj(rb, obj_info.name, crc)
 
 
-            validate_obj(rb, obj_name, self.r_crc)
+# prepare:
+# init, create obj in different storage classes, copy them
+# check:
+# verify rados objects data, and in expected location
+class r_test_obj_storage_class_copy(RTest):
+    def init(self):
+        self.obj_size = 5 * 1024 * 1024
+
+    def prepare(self):
+        rb = self.create_bucket()
+        zone = get_zone()
+
+        placement_target = zone.get_placement_target(rb.placement_rule.placement_id)
+
+        data = generate_random(self.obj_size)
+        crc = calc_crc(data)
+
+        self.r_objs = []
+
+        for sc in placement_target.storage_classes.get_all():
+            obj_info = ObjInfo()
+            obj_info.storage_class = sc
+            obj_info.name = 'foo-' + sc
+            obj_info.obj_size = self.obj_size
+            obj_info.crc = crc
+
+            obj = Key(rb.bucket)
+            obj.key = obj_info.name
+            obj.storage_class = sc
+            obj.set_contents_from_string(data)
+            self.r_objs.append(obj_info)
+
+            for sc2 in placement_target.storage_classes.get_all():
+                copy_obj_info = ObjInfo()
+                copy_obj_info.storage_class = sc2
+                copy_obj_info.name = obj_info.name + '-' + sc2
+                copy_obj_info.obj_size = obj_info.obj_size
+                copy_obj_info.crc = obj_info.crc
+
+                rb.bucket.copy_key(copy_obj_info.name, rb.bucket.name, obj_info.name, storage_class=copy_obj_info.storage_class)
+
+                self.r_objs.append(copy_obj_info)
+
+
+
+    def check(self):
+        for rb in self.get_buckets():
+            break
+
+        for obj_info in self.r_objs:
+            k = rb.bucket.get_key(obj_info.name)
+            eq(k.size, obj_info.obj_size)
+            eq(k.storage_class, obj_info.storage_class)
+
+            print 'validate', obj_info.name
+
+            validate_obj(rb, obj_info.name, obj_info.crc)
+
+# prepare:
+# init, create multipart obj in different storage classes, copy them
+# check:
+# verify rados objects data, and in expected location
+class r_test_obj_storage_class_multipart_copy(RTest):
+    def init(self):
+        self.obj_size = 11 * 1024 * 1024
+        self.part_size = 5 * 1024 * 1024
+
+    def prepare(self):
+        rb = self.create_bucket()
+        zone = get_zone()
+
+        placement_target = zone.get_placement_target(rb.placement_rule.placement_id)
+
+        self.r_objs = []
+
+        for sc in placement_target.storage_classes.get_all():
+            obj_info = ObjInfo()
+            obj_info.storage_class = sc
+            obj_info.name = 'foo-' + sc
+            obj_info.obj_size = self.obj_size
+
+            uploader = MultipartUploader(rb, obj_info.name, self.obj_size, self.part_size, storage_class=sc)
+
+            uploader.prepare()
+            uploader.upload_all()
+            uploader.complete()
+
+            obj_info.crc = uploader.hexdigest()
+
+            self.r_objs.append(obj_info)
+
+            for sc2 in placement_target.storage_classes.get_all():
+                copy_obj_info = ObjInfo()
+                copy_obj_info.storage_class = sc2
+                copy_obj_info.name = obj_info.name + '-' + sc2
+                copy_obj_info.obj_size = obj_info.obj_size
+                copy_obj_info.crc = obj_info.crc
+
+                rb.bucket.copy_key(copy_obj_info.name, rb.bucket.name, obj_info.name, storage_class=copy_obj_info.storage_class)
+
+                self.r_objs.append(copy_obj_info)
+
+
+
+    def check(self):
+        for rb in self.get_buckets():
+            break
+
+        for obj_info in self.r_objs:
+            k = rb.bucket.get_key(obj_info.name)
+            eq(k.size, obj_info.obj_size)
+            eq(k.storage_class, obj_info.storage_class)
+
+            print 'validate', obj_info.name
+
+            validate_obj(rb, obj_info.name, obj_info.crc)
 
