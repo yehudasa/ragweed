@@ -134,6 +134,17 @@ def rtest_decode_json(d):
         return pickle.loads(str(d['__pickle']))
     return d
 
+class RPlacementRule:
+    def __init__(self, rule):
+        r = rule.split('/', 1)
+
+        self.placement_id = r[0]
+
+        if (len(r) == 2):
+            self.storage_class=r[1]
+        else:
+            self.storage_class = 'STANDARD'
+
 
 class RBucket:
     def __init__(self, zone, bucket, bucket_info):
@@ -141,6 +152,12 @@ class RBucket:
         self.bucket = bucket
         self.name = bucket.name
         self.bucket_info = bucket_info
+
+        try:
+            self.placement_rule = RPlacementRule(self.bucket_info.placement_rule)
+            self.placement_target = self.zone.get_placement_target(self.bucket_info.placement_rule)
+        except:
+            pass
 
     def get_data_pool(self):
         try:
@@ -151,7 +168,9 @@ class RBucket:
             explicit_pool = self.bucket_info.bucket.explicit_placement.data_pool
         if explicit_pool is not None and explicit_pool != '':
             return explicit_pool
-        return self.zone.get_placement_target(self.bucket_info.placement_rule).data_pool
+
+        return self.placement_target.get_data_pool(self.placement_rule)
+
 
     def get_tail_pool(self, obj_layout):
         try:
@@ -171,7 +190,48 @@ class RBucket:
                 except:
                     pass
 
-        return self.zone.get_placement_target(placement_rule).data_pool
+        pr = RPlacementRule(placement_rule)
+
+        return self.placement_target.get_data_pool(pr)
+
+class RStorageClasses:
+    def __init__(self, config):
+        if hasattr(config, 'storage_classes'):
+            self.storage_classes = config.storage_classes
+        else:
+            try:
+                self.storage_classes = bunch.bunchify({ 'STANDARD': { 'data_pool': config.data_pool }})
+            except:
+                self.storage_classes = None
+                pass
+
+    def get(self, storage_class):
+        assert(self.storage_classes != None)
+        try:
+            if not storage_class:
+                storage_class = 'STANDARD'
+            sc = self.storage_classes[storage_class]
+        except:
+            eq('could not find storage class ' + storage_class, 0)
+
+        return sc
+
+    def get_all(self):
+        for (name, _) in self.storage_classes.iteritems():
+            yield name
+
+class RPlacementTarget:
+    def __init__(self, name, config):
+        self.name = name
+        self.index_pool = config.index_pool
+        self.data_extra_pool = config.data_extra_pool
+        self.storage_classes = RStorageClasses(config)
+
+        if not self.data_extra_pool:
+            self.data_extra_pool = self.storage_classes.get_data_pool('STANDARD')
+
+    def get_data_pool(self, placement_rule):
+        return self.storage_classes.get(placement_rule.storage_class).data_pool
 
 class RZone:
     def __init__(self, conn):
@@ -194,11 +254,14 @@ class RZone:
             plid = self.zone_params.default_placement
 
         try:
-            return self.placement_targets[plid]
+            return RPlacementTarget(plid, self.placement_targets[plid])
         except:
             pass
 
         return None
+
+    def get_default_placement(self):
+        return get_placement_target(self.zone_params.default_placement)
 
     def create_bucket(self, name):
         bucket = self.create_raw_bucket(name)
