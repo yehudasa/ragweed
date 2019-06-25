@@ -294,7 +294,9 @@ class RTest:
 
     def create_bucket(self):
         bid = len(self.r_buckets) + 1
-        rb = suite.zone.create_bucket(suite.get_bucket_name(self._name + '-' + str(bid)))
+        bucket_name =  suite.get_bucket_name(self._name + '.' + str(bid))
+        bucket_name = bucket_name.replace("_", "-")
+        rb = suite.zone.create_bucket(bucket_name)
         self.r_buckets.append(rb)
 
         return rb
