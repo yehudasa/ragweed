@@ -36,16 +36,16 @@ def get_placement(obj_json):
 def validate_obj_location(rbucket, obj):
     expected_head_pool = rbucket.get_data_pool()
     head_pool_ioctx = get_pool_ioctx(expected_head_pool)
-    print 'expected head pool: ' + expected_head_pool
+    print('expected head pool: ' + expected_head_pool)
 
     obj_layout = rgwa().get_obj_layout(obj)
 
-    print 'layout', obj_layout
+    print('layout', obj_layout)
 
     obj_size = obj_layout.manifest.obj_size
-    print 'obj_size', obj_size
+    print('obj_size', obj_size)
 
-    print 'head', obj_layout.head
+    print('head', obj_layout.head)
     expected_tail_pool = rbucket.get_tail_pool(obj_layout)
     tail_pool_ioctx = get_pool_ioctx(expected_tail_pool)
 
@@ -57,12 +57,12 @@ def validate_obj_location(rbucket, obj):
     head_pool_ioctx.set_locator_key(head_placement.loc)
     (size, mtime) = head_pool_ioctx.stat(head_placement.oid)
 
-    print 'head size:', size, 'mtime:', mtime
+    print('head size:', size, 'mtime:', mtime)
 
     # check tail
     for o in obj_layout.data_location:
-        print 'o=', o
-        print 'ofs=', o.ofs, 'loc', o.loc
+        print('o=', o)
+        print('ofs=', o.ofs, 'loc', o.loc)
         placement = get_placement(o.loc)
         if o.ofs < obj_layout.manifest.head_size:
             eq(placement.pool, expected_head_pool)
@@ -147,7 +147,7 @@ class r_test_small_obj_data(RTest):
                 obj.set_contents_from_string(data)
 
     def check(self):
-        print self.r_obj_names
+        print(self.r_obj_names)
         for rbucket in self.get_buckets():
             size = self.r_bucket_sizes[rbucket.name]
             data = '0' * int(size)
@@ -259,7 +259,7 @@ class r_test_multipart_simple(RTest):
         uploader.complete()
 
         self.r_crc = uploader.hexdigest()
-        print 'written crc: ' + self.r_crc
+        print('written crc: ' + self.r_crc)
 
     def check(self):
         for rb in self.get_buckets():
@@ -294,7 +294,7 @@ class r_test_multipart_index_versioning(RTest):
         for rb in self.get_buckets():
             break
         index_check_result = rgwa().check_bucket_index(rb.name)
-        print index_check_result
+        print(index_check_result)
 
         eq(0, len(index_check_result))
 
@@ -331,7 +331,7 @@ class r_test_multipart_defer_complete(RTest):
 
         uploader.complete()
         crc = uploader.hexdigest()
-        print 'written crc: ' + crc
+        print('written crc: ' + crc)
 
         k = rb.bucket.get_key(self.r_obj)
         eq(k.size, self.obj_size)
@@ -373,7 +373,7 @@ class r_test_multipart_defer_update_complete(RTest):
         uploader.upload_all() # upload remaining
         uploader.complete()
         crc = uploader.hexdigest()
-        print 'written crc: ' + crc
+        print('written crc: ' + crc)
 
         k = rb.bucket.get_key(self.r_obj)
         eq(k.size, self.obj_size)
@@ -475,7 +475,7 @@ class r_test_obj_storage_class_multipart(RTest):
 
             uploader.complete()
             crc = uploader.hexdigest()
-            print 'written crc: ' + crc
+            print('written crc: ' + crc)
 
             k = rb.bucket.get_key(obj_info.name)
             eq(k.size, self.obj_size)
@@ -538,7 +538,7 @@ class r_test_obj_storage_class_copy(RTest):
             eq(k.size, obj_info.obj_size)
             eq(k.storage_class, obj_info.storage_class)
 
-            print 'validate', obj_info.name
+            print('validate', obj_info.name)
 
             validate_obj(rb, obj_info.name, obj_info.crc)
 
@@ -597,7 +597,7 @@ class r_test_obj_storage_class_multipart_copy(RTest):
             eq(k.size, obj_info.obj_size)
             eq(k.storage_class, obj_info.storage_class)
 
-            print 'validate', obj_info.name
+            print('validate', obj_info.name)
 
             validate_obj(rb, obj_info.name, obj_info.crc)
 

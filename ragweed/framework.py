@@ -59,7 +59,7 @@ class RGWRESTAdmin:
     def get_bucket_instance_info(self, bucket_name, bucket_id = None):
         if not bucket_id:
             ep = self.get_bucket_entrypoint(bucket_name)
-            print ep
+            print(ep)
             bucket_id = ep.data.bucket.bucket_id
         result = self.read_meta_key('bucket.instance:' + bucket_name + ":" + bucket_id)
         return result.data.bucket_info
@@ -73,7 +73,7 @@ class RGWRESTAdmin:
         if key.version_id is not None:
             params['versionId'] = key.version_id
 
-        print params
+        print(params)
 
         return self.get_resource(path, params)
 
@@ -113,7 +113,7 @@ class RSuite:
         k = Key(self.config_bucket)
         k.key = 'tests/' + test._name
         s = k.get_contents_as_string()
-        print 'read_test_data=', s
+        print('read_test_data=', s)
         test.from_json(s)
 
     def is_preparing(self):
@@ -245,12 +245,12 @@ class RZone:
         for e in self.zone_params.placement_pools:
             self.placement_targets[e.key] = e.val
 
-        print 'zone_params:', self.zone_params
+        print('zone_params:', self.zone_params)
 
     def get_placement_target(self, placement_id):
         plid = placement_id
         if placement_id is None or placement_id == '':
-            print 'zone_params=', self.zone_params
+            print('zone_params=', self.zone_params)
             plid = self.zone_params.default_placement
 
         try:
@@ -266,13 +266,13 @@ class RZone:
     def create_bucket(self, name):
         bucket = self.create_raw_bucket(name)
         bucket_info = self.rgw_rest_admin.get_bucket_instance_info(bucket.name)
-        print 'bucket_info:', bucket_info
+        print('bucket_info:', bucket_info)
         return RBucket(self, bucket, bucket_info)
 
     def get_bucket(self, name):
         bucket = self.get_raw_bucket(name)
         bucket_info = self.rgw_rest_admin.get_bucket_instance_info(bucket.name)
-        print 'bucket_info:', bucket_info
+        print('bucket_info:', bucket_info)
         return RBucket(self, bucket, bucket_info)
 
     def create_raw_bucket(self, name):
@@ -348,7 +348,7 @@ def read_config(fp):
     config = bunch.Bunch()
     g = yaml.safe_load_all(fp)
     for new in g:
-        print bunch.bunchify(new)
+        print(bunch.bunchify(new))
         config.update(bunch.bunchify(new))
     return config
 
@@ -422,7 +422,7 @@ class RagweedEnv:
                 except ConfigParser.NoOptionError:
                     pass
 
-        print json.dumps(self.config)
+        print(json.dumps(self.config))
 
         rgw_conf = self.config.rgw
 
@@ -451,7 +451,7 @@ class RagweedEnv:
         pools = self.rados.list_pools()
 
         for pool in pools:
-             print "rados pool>", pool
+             print("rados pool>", pool)
 
 def setup_module():
     global ragweed_env
