@@ -7,11 +7,11 @@ import inspect
 import pickle
 import bunch
 import yaml
-import ConfigParser
-import rados
+import configparser
 from boto.s3.key import Key
 from nose.plugins.attrib import attr
 from nose.tools import eq_ as eq
+import rados
 
 from .reqs import _make_admin_request
 
@@ -378,7 +378,7 @@ class RagweedEnv:
     def __init__(self):
         self.config = bunch.Bunch()
 
-        cfg = ConfigParser.RawConfigParser()
+        cfg = configparser.RawConfigParser()
         try:
             path = os.environ['RAGWEED_CONF']
         except KeyError:
@@ -407,19 +407,19 @@ class RagweedEnv:
             for var in str_config_opts:
                 try:
                     cur[name][var] = cfg.get(section, var)
-                except ConfigParser.NoOptionError:
+                except configparser.NoOptionError:
                     pass
 
             for var in int_config_opts:
                 try:
                     cur[name][var] = cfg.getint(section, var)
-                except ConfigParser.NoOptionError:
+                except configparser.NoOptionError:
                     pass
 
             for var in bool_config_opts:
                 try:
                     cur[name][var] = cfg.getboolean(section, var)
-                except ConfigParser.NoOptionError:
+                except configparser.NoOptionError:
                     pass
 
         print(json.dumps(self.config))

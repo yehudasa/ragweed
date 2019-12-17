@@ -1,6 +1,6 @@
 import boto.s3.connection
-from httplib import HTTPConnection, HTTPSConnection
-from urlparse import urlparse
+from http.client import HTTPConnection, HTTPSConnection
+from urllib.parse import urlparse
 import urllib
 
 def _make_admin_request(conn, method, path, query_dict=None, body=None, response_headers=None, request_headers=None, expires_in=100000, path_style=True, timeout=None):
@@ -100,7 +100,7 @@ def _make_raw_request(host, port, method, path, body=None, request_headers=None,
     c = class_(host, port, strict=True, timeout=timeout)
 
     # TODO: We might have to modify this in future if we need to interact with
-    # how httplib.request handles Accept-Encoding and Host.
+    # how http.client.request handles Accept-Encoding and Host.
     c.request(method, path, body=body, headers=request_headers)
 
     res = c.getresponse()
