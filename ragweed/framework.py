@@ -386,7 +386,7 @@ class RagweedEnv:
                 'To run tests, point environment '
                 + 'variable RAGWEED_CONF to a config file.',
                 )
-        with file(path) as f:
+        with open(path, 'r') as f:
             cfg.readfp(f)
 
         for section in cfg.sections():
