@@ -7,11 +7,11 @@ import inspect
 import pickle
 import bunch
 import yaml
-import ConfigParser
-import rados
+import configparser
 from boto.s3.key import Key
 from nose.plugins.attrib import attr
 from nose.tools import eq_ as eq
+import rados
 
 from .reqs import _make_admin_request
 
@@ -59,7 +59,7 @@ class RGWRESTAdmin:
     def get_bucket_instance_info(self, bucket_name, bucket_id = None):
         if not bucket_id:
             ep = self.get_bucket_entrypoint(bucket_name)
-            print ep
+            print(ep)
             bucket_id = ep.data.bucket.bucket_id
         result = self.read_meta_key('bucket.instance:' + bucket_name + ":" + bucket_id)
         return result.data.bucket_info
@@ -73,7 +73,7 @@ class RGWRESTAdmin:
         if key.version_id is not None:
             params['versionId'] = key.version_id
 
-        print params
+        print(params)
 
         return self.get_resource(path, params)
 
@@ -113,7 +113,7 @@ class RSuite:
         k = Key(self.config_bucket)
         k.key = 'tests/' + test._name
         s = k.get_contents_as_string()
-        print 'read_test_data=', s
+        print('read_test_data=', s)
         test.from_json(s)
 
     def is_preparing(self):
@@ -245,12 +245,12 @@ class RZone:
         for e in self.zone_params.placement_pools:
             self.placement_targets[e.key] = e.val
 
-        print 'zone_params:', self.zone_params
+        print('zone_params:', self.zone_params)
 
     def get_placement_target(self, placement_id):
         plid = placement_id
         if placement_id is None or placement_id == '':
-            print 'zone_params=', self.zone_params
+            print('zone_params=', self.zone_params)
             plid = self.zone_params.default_placement
 
         try:
@@ -266,13 +266,13 @@ class RZone:
     def create_bucket(self, name):
         bucket = self.create_raw_bucket(name)
         bucket_info = self.rgw_rest_admin.get_bucket_instance_info(bucket.name)
-        print 'bucket_info:', bucket_info
+        print('bucket_info:', bucket_info)
         return RBucket(self, bucket, bucket_info)
 
     def get_bucket(self, name):
         bucket = self.get_raw_bucket(name)
         bucket_info = self.rgw_rest_admin.get_bucket_instance_info(bucket.name)
-        print 'bucket_info:', bucket_info
+        print('bucket_info:', bucket_info)
         return RBucket(self, bucket, bucket_info)
 
     def create_raw_bucket(self, name):
@@ -348,7 +348,7 @@ def read_config(fp):
     config = bunch.Bunch()
     g = yaml.safe_load_all(fp)
     for new in g:
-        print bunch.bunchify(new)
+        print(bunch.bunchify(new))
         config.update(bunch.bunchify(new))
     return config
 
@@ -378,7 +378,7 @@ class RagweedEnv:
     def __init__(self):
         self.config = bunch.Bunch()
 
-        cfg = ConfigParser.RawConfigParser()
+        cfg = configparser.RawConfigParser()
         try:
             path = os.environ['RAGWEED_CONF']
         except KeyError:
@@ -386,7 +386,7 @@ class RagweedEnv:
                 'To run tests, point environment '
                 + 'variable RAGWEED_CONF to a config file.',
                 )
-        with file(path) as f:
+        with open(path, 'r') as f:
             cfg.readfp(f)
 
         for section in cfg.sections():
@@ -407,22 +407,22 @@ class RagweedEnv:
             for var in str_config_opts:
                 try:
                     cur[name][var] = cfg.get(section, var)
-                except ConfigParser.NoOptionError:
+                except configparser.NoOptionError:
                     pass
 
             for var in int_config_opts:
                 try:
                     cur[name][var] = cfg.getint(section, var)
-                except ConfigParser.NoOptionError:
+                except configparser.NoOptionError:
                     pass
 
             for var in bool_config_opts:
                 try:
                     cur[name][var] = cfg.getboolean(section, var)
-                except ConfigParser.NoOptionError:
+                except configparser.NoOptionError:
                     pass
 
-        print json.dumps(self.config)
+        print(json.dumps(self.config))
 
         rgw_conf = self.config.rgw
 
@@ -451,7 +451,7 @@ class RagweedEnv:
         pools = self.rados.list_pools()
 
         for pool in pools:
-             print "rados pool>", pool
+             print("rados pool>", pool)
 
 def setup_module():
     global ragweed_env

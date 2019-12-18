@@ -2,7 +2,7 @@
 set -e
 
 if [ -f /etc/debian_version ]; then
-    for package in python-pip python-virtualenv python-dev python-six libevent-dev libxml2-dev libxslt-dev zlib1g-dev; do
+    for package in python3-pip python3-virtualenv python3-dev libevent-dev libxml2-dev libxslt-dev zlib1g-dev; do
         if [ "$(dpkg --status -- $package 2>/dev/null|sed -n 's/^Status: //p')" != "install ok installed" ]; then
             # add a space after old values
             missing="${missing:+$missing }$package"
@@ -14,7 +14,7 @@ if [ -f /etc/debian_version ]; then
     fi
 fi
 if [ -f /etc/redhat-release ]; then
-    for package in python-pip python-virtualenv python-devel python-six libevent-devel libxml2-devel libxslt-devel zlib-devel; do
+    for package in python3-pip python3-virtualenv python3-devel libevent-devel libxml2-devel libxslt-devel zlib-devel; do
         if [ "$(rpm -qa $package 2>/dev/null)" == "" ]; then
             missing="${missing:+$missing }$package"
         fi
@@ -25,7 +25,7 @@ if [ -f /etc/redhat-release ]; then
     fi
 fi
 
-virtualenv --system-site-packages --distribute virtualenv
+virtualenv -p python3 --system-site-packages --distribute virtualenv
 
 # avoid pip bugs
 ./virtualenv/bin/pip install --upgrade pip
@@ -33,7 +33,7 @@ virtualenv --system-site-packages --distribute virtualenv
 # work-around change in pip 1.5
 ./virtualenv/bin/pip install six
 ./virtualenv/bin/pip install -I nose
-./virtualenv/bin/pip install setuptools==32.3.1
+./virtualenv/bin/pip install setuptools
 
 ./virtualenv/bin/pip install -U -r requirements.txt
 
