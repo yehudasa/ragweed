@@ -5,7 +5,7 @@ import boto.s3.connection
 import json
 import inspect
 import pickle
-import bunch
+import munch
 import yaml
 import configparser
 from boto.s3.key import Key
@@ -47,7 +47,7 @@ class RGWRESTAdmin:
         r = _make_admin_request(self.conn, "GET", path, params)
         if r.status != 200:
             raise boto.exception.S3ResponseError(r.status, r.reason)
-        return bunch.bunchify(json.loads(r.read()))
+        return munch.munchify(json.loads(r.read()))
 
 
     def read_meta_key(self, key):
@@ -125,13 +125,13 @@ class RSuite:
 
 class RTestJSONSerialize(json.JSONEncoder):
     def default(self, obj):
-        if isinstance(obj, (list, dict, str, unicode, int, float, bool, type(None))):
+        if isinstance(obj, (list, dict, tuple, str, int, float, bool, type(None))):
             return JSONEncoder.default(self, obj)
-        return {'__pickle': pickle.dumps(obj)}
+        return {'__pickle': pickle.dumps(obj, 0).decode('utf-8')}
 
 def rtest_decode_json(d):
     if '__pickle' in d:
-        return pickle.loads(str(d['__pickle']))
+        return pickle.loads(bytearray(d['__pickle'], 'utf-8'))
     return d
 
 class RPlacementRule:
@@ -200,7 +200,7 @@ class RStorageClasses:
             self.storage_classes = config.storage_classes
         else:
             try:
-                self.storage_classes = bunch.bunchify({ 'STANDARD': { 'data_pool': config.data_pool }})
+                self.storage_classes = munch.munchify({ 'STANDARD': { 'data_pool': config.data_pool }})
             except:
                 self.storage_classes = None
                 pass
@@ -217,7 +217,7 @@ class RStorageClasses:
         return sc
 
     def get_all(self):
-        for (name, _) in self.storage_classes.iteritems():
+        for (name, _) in self.storage_classes.items():
             yield name
 
 class RPlacementTarget:
@@ -345,11 +345,11 @@ class RTest:
             self.check()
 
 def read_config(fp):
-    config = bunch.Bunch()
+    config = munch.Munch()
     g = yaml.safe_load_all(fp)
     for new in g:
-        print(bunch.bunchify(new))
-        config.update(bunch.bunchify(new))
+        print(munch.munchify(new))
+        config.update(munch.munchify(new))
     return config
 
 str_config_opts = [
@@ -370,13 +370,13 @@ bool_config_opts = [
                 ]
 
 def dict_find(d, k):
-    if d.has_key(k):
+    if k in d:
         return d[k]
     return None
 
 class RagweedEnv:
     def __init__(self):
-        self.config = bunch.Bunch()
+        self.config = munch.Munch()
 
         cfg = configparser.RawConfigParser()
         try:
@@ -392,17 +392,17 @@ class RagweedEnv:
         for section in cfg.sections():
             try:
                 (section_type, name) = section.split(None, 1)
-                if not self.config.has_key(section_type):
-                    self.config[section_type] = bunch.Bunch()
-                self.config[section_type][name] = bunch.Bunch()
+                if not section_type in self.config:
+                    self.config[section_type] = munch.Munch()
+                self.config[section_type][name] = munch.Munch()
                 cur = self.config[section_type]
             except ValueError:
                 section_type = ''
                 name = section
-                self.config[name] = bunch.Bunch()
+                self.config[name] = munch.Munch()
                 cur = self.config
 
-            cur[name] = bunch.Bunch()
+            cur[name] = munch.Munch()
 
             for var in str_config_opts:
                 try:
@@ -431,8 +431,8 @@ class RagweedEnv:
         except:
             self.bucket_prefix = 'ragweed'
 
-        conn = bunch.Bunch()
-        for (k, u) in self.config.user.iteritems():
+        conn = munch.Munch()
+        for (k, u) in self.config.user.items():
             conn[k] = RGWConnection(u.access_key, u.secret_key, rgw_conf.host, dict_find(rgw_conf, 'port'), dict_find(rgw_conf, 'is_secure'))
 
         self.zone = RZone(conn)

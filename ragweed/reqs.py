@@ -1,7 +1,6 @@
 import boto.s3.connection
 from http.client import HTTPConnection, HTTPSConnection
-from urllib.parse import urlparse
-import urllib
+from urllib.parse import urlparse, urlencode
 
 def _make_admin_request(conn, method, path, query_dict=None, body=None, response_headers=None, request_headers=None, expires_in=100000, path_style=True, timeout=None):
     """
@@ -12,7 +11,7 @@ def _make_admin_request(conn, method, path, query_dict=None, body=None, response
 
     query = ''
     if query_dict is not None:
-        query = urllib.urlencode(query_dict)
+        query = urlencode(query_dict)
 
     (bucket_str, key_str) = path.split('/', 2)[1:]
     bucket = conn.get_bucket(bucket_str, validate=False)
@@ -97,7 +96,7 @@ def _make_raw_request(host, port, method, path, body=None, request_headers=None,
     if request_headers is None:
         request_headers = {}
 
-    c = class_(host, port, strict=True, timeout=timeout)
+    c = class_(host, port, timeout=timeout)
 
     # TODO: We might have to modify this in future if we need to interact with
     # how http.client.request handles Accept-Encoding and Host.
