@@ -125,13 +125,13 @@ class RSuite:
 
 class RTestJSONSerialize(json.JSONEncoder):
     def default(self, obj):
-        if isinstance(obj, (list, dict, str, int, float, bool, type(None))):
+        if isinstance(obj, (list, dict, tuple, str, int, float, bool, type(None))):
             return JSONEncoder.default(self, obj)
-        return {'__pickle': pickle.dumps(obj)}
+        return {'__pickle': pickle.dumps(obj, 0).decode('utf-8')}
 
 def rtest_decode_json(d):
     if '__pickle' in d:
-        return pickle.loads(str(d['__pickle']))
+        return pickle.loads(bytearray(d['__pickle'], 'utf-8'))
     return d
 
 class RPlacementRule:

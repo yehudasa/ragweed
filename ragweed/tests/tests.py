@@ -108,9 +108,9 @@ def generate_random(size):
     chunk = 1024
     allowed = string.ascii_letters
     s = ''
-    strpart = ''.join([allowed[random.randint(0, len(allowed) - 1)] for _ in xrange(chunk)])
+    strpart = ''.join([allowed[random.randint(0, len(allowed) - 1)] for _ in range(chunk)])
 
-    for y in range((size + chunk - 1) / chunk):
+    for y in range((size + chunk - 1) // chunk):
         this_chunk_len = chunk
 
         if len(s) + this_chunk_len > size:
@@ -156,7 +156,7 @@ class r_test_small_obj_data(RTest):
                 obj = Key(rbucket.bucket)
                 obj.key = n;
                 obj_data = obj.get_contents_as_string()
-                eq(data, obj_data)
+                eq(bytearray(data, 'utf-8'), obj_data)
 
                 validate_obj_location(rbucket, obj)
 
@@ -185,7 +185,7 @@ class MultipartUploader:
                 if upload.key_name == self.obj_name and upload.id == state.upload_id:
                     self.mp = upload
 
-        self.num_full_parts = self.size / self.part_size
+        self.num_full_parts = self.size // self.part_size
         self.last_part_size = self.size % self.part_size
 
 
@@ -205,10 +205,10 @@ class MultipartUploader:
             return False
 
         if self.cur_part < self.num_full_parts:
-            payload=gen_rand_string(self.part_size / (1024 * 1024)) * 1024 * 1024
+            payload=gen_rand_string(self.part_size // (1024 * 1024)) * 1024 * 1024
 
             self.mp.upload_part_from_file(StringIO(payload), self.cur_part + 1)
-            self.crc = binascii.crc32(payload, self.crc)
+            self.crc = binascii.crc32(bytearray(payload, 'utf-8'), self.crc)
             self.cur_part += 1
 
             return True
@@ -218,7 +218,7 @@ class MultipartUploader:
             last_payload='1'*self.last_part_size
 
             self.mp.upload_part_from_file(StringIO(last_payload), self.num_full_parts + 1)
-            self.crc = binascii.crc32(last_payload, self.crc)
+            self.crc = binascii.crc32(bytearray(last_payload, 'utf-8'), self.crc)
             self.cur_part += 1
 
         return False
@@ -398,7 +398,7 @@ class r_test_obj_storage_class(RTest):
         placement_target = zone.get_placement_target(rb.placement_rule.placement_id)
 
         data = generate_random(self.obj_size)
-        crc = calc_crc(data)
+        crc = calc_crc(bytearray(data, 'utf-8'))
 
         self.r_objs = []
 
@@ -499,7 +499,7 @@ class r_test_obj_storage_class_copy(RTest):
         placement_target = zone.get_placement_target(rb.placement_rule.placement_id)
 
         data = generate_random(self.obj_size)
-        crc = calc_crc(data)
+        crc = calc_crc(bytearray(data, 'utf-8'))
 
         self.r_objs = []
 
