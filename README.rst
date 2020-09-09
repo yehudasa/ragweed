@@ -19,6 +19,10 @@ the ``virtualenv`` software installed; e.g. on Debian/Ubuntu::
 
 	sudo apt-get install python-virtualenv
 
+on Fedora/RHEL::
+
+	sudo yum install python3-virtualenv
+
 and then run::
 
 	./bootstrap
@@ -60,4 +64,3 @@ OR::
 Finally run the ragweed tests::
 
 	RAGWEED_CONF=ragweed.conf RAGWEED_STAGES=prepare,check ./virtualenv/bin/nosetests -v
-
