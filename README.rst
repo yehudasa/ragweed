@@ -14,7 +14,7 @@ Each of these phases can be executed separately.
 
 For more information on the background of the tests visit: https://www.spinics.net/lists/ceph-devel/msg34636.html
 
-The tests use the Nose test framework. To get started, ensure you have
+The tests use the pytest test framework. To get started, ensure you have
 the ``virtualenv`` software installed; e.g. on Debian/Ubuntu::
 
 	sudo apt-get install python-virtualenv
@@ -33,7 +33,7 @@ service and two different credentials. A sample configuration file named
 
 Once you have that file copied and edited, you can run the tests with::
 
-	RAGWEED_CONF=ragweed.conf RAGWEED_STAGES=prepare,check ./virtualenv/bin/nosetests -v
+	RAGWEED_CONF=ragweed.conf RAGWEED_STAGES=prepare,check ./virtualenv/bin/pytest -v
 
 The phase(s) of the tests are set via ``RAGWEED_STAGES``. The options for ``RAGWEED_STAGES``  are ``prepare`` and ``check``. ``test`` can be used instead of ``check``.
 
@@ -63,4 +63,4 @@ OR::
 
 Finally run the ragweed tests::
 
-	RAGWEED_CONF=ragweed.conf RAGWEED_STAGES=prepare,check ./virtualenv/bin/nosetests -v
+	RAGWEED_CONF=ragweed.conf RAGWEED_STAGES=prepare,check ./virtualenv/bin/pytest -v
